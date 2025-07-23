@@ -84,7 +84,7 @@ export class BacklogMcpServer {
           }
 
           // Sync issues to task files
-          await this.taskManager.syncIssues(issues, this.config.baseUrl);
+          await this.taskManager.syncIssues(issues, this.config.baseUrl, this.config.ignoreIssueTypes);
 
           // Cleanup removed issues if doing a full sync (first time)
           if (!lastSyncTime) {
@@ -93,12 +93,20 @@ export class BacklogMcpServer {
           }
 
           // Save current sync time for next time
-          await this.taskManager.saveLastSyncTime(currentSyncTime);
+          await this.taskManager.saveLastSyncTime(currentSyncTime, issues);
+
+          // Create success message with filtering info
+          let message = `✅ ${syncMessage}`;
+          if (this.config.ignoreIssueTypes && this.config.ignoreIssueTypes.length > 0) {
+            message += `\nIgnored issue types: ${this.config.ignoreIssueTypes.join(', ')}`;
+          }
+          message += `\nSaved to: ${this.taskManager.getTasksDirectory()}`;
+          message += `\nNext sync will check for updates since: ${new Date(currentSyncTime).toLocaleString()}`;
 
           return {
             content: [{
               type: 'text',
-              text: `✅ ${syncMessage}\nSaved to: ${this.taskManager.getTasksDirectory()}\nNext sync will check for updates since: ${new Date(currentSyncTime).toLocaleString()}`
+              text: message
             }]
           };
         } catch (error) {
@@ -219,17 +227,17 @@ export class BacklogMcpServer {
       }
     );
 
-    // Update issue tool
+    // Update issues tool
     this.server.registerTool(
-      'update-issue',
+      'update-issues',
       {
-        title: 'Update Backlog Issue',
-        description: 'Update a Backlog issue with changes from local task file',
+        title: 'Update Backlog Issues',
+        description: 'Update Backlog issues with changes from local task files',
         inputSchema: {
-          issueKey: z.string().describe('Issue key (e.g., PROJ-123)')
+          issueKeys: z.array(z.string()).describe('Array of issue keys (e.g., ["PROJ-123", "PROJ-124"])')
         }
       },
-      async ({ issueKey }) => {
+      async ({ issueKeys }) => {
         try {
           if (!this.config) {
             return {
@@ -241,13 +249,11 @@ export class BacklogMcpServer {
             };
           }
 
-          // Read the local task file
-          const taskData = await this.taskManager.readTaskFile(issueKey);
-          if (!taskData) {
+          if (!issueKeys || issueKeys.length === 0) {
             return {
               content: [{
                 type: 'text',
-                text: `❌ Local task file for ${issueKey} not found. Please ensure the file exists in your tasks directory.`
+                text: '❌ No issue keys provided. Please specify at least one issue key.'
               }],
               isError: true
             };
@@ -261,72 +267,87 @@ export class BacklogMcpServer {
           };
           const client = new BacklogClient(config);
 
-          // Get the original issue to compare
-          let originalIssue;
-          try {
-            originalIssue = await client.getIssue(issueKey);
-          } catch (error) {
-            return {
-              content: [{
-                type: 'text',
-                text: `❌ Failed to fetch issue ${issueKey} from Backlog. Please check if the issue exists.`
-              }],
-              isError: true
-            };
-          }
+          const results: string[] = [];
+          let successCount = 0;
+          let errorCount = 0;
 
-          // Check what has changed
-          const changes: { summary?: string; description?: string } = {};
-          let changesList: string[] = [];
-
-          if (taskData.title && taskData.title !== originalIssue.summary) {
-            changes.summary = taskData.title;
-            changesList.push(`Title: "${originalIssue.summary}" → "${taskData.title}"`);
-          }
-
-          // Compare descriptions, treating null/undefined as empty string
-          const localDesc = taskData.description || '';
-          const backlogDesc = originalIssue.description || '';
-          
-          if (localDesc !== backlogDesc) {
-            // Safety check: if local is empty but Backlog has content, be careful
-            if (!localDesc && backlogDesc) {
-              // WARNING: Local description is empty but Backlog has content. Skipping description update to prevent data loss.
-              changesList.push(`Description update skipped (would remove existing content)`);
-            } else {
-              changes.description = localDesc;
-              if (localDesc && backlogDesc) {
-                changesList.push(`Description updated`);
-              } else if (localDesc && !backlogDesc) {
-                changesList.push(`Description added`);
+          for (const issueKey of issueKeys) {
+            try {
+              // Read the local task file
+              const taskData = await this.taskManager.readTaskFile(issueKey);
+              if (!taskData) {
+                results.push(`❌ ${issueKey}: Local task file not found`);
+                errorCount++;
+                continue;
               }
+
+              // Get the original issue to compare
+              let originalIssue;
+              try {
+                originalIssue = await client.getIssue(issueKey);
+              } catch (error) {
+                results.push(`❌ ${issueKey}: Failed to fetch from Backlog`);
+                errorCount++;
+                continue;
+              }
+
+              // Check what has changed
+              const changes: { summary?: string; description?: string } = {};
+              let changesList: string[] = [];
+
+              if (taskData.title && taskData.title !== originalIssue.summary) {
+                changes.summary = taskData.title;
+                changesList.push(`Title updated`);
+              }
+
+              // Compare descriptions, treating null/undefined as empty string
+              const localDesc = taskData.description || '';
+              const backlogDesc = originalIssue.description || '';
+              
+              if (localDesc !== backlogDesc) {
+                // Safety check: if local is empty but Backlog has content, be careful
+                if (!localDesc && backlogDesc) {
+                  changesList.push(`Description update skipped (would remove existing content)`);
+                } else {
+                  changes.description = localDesc;
+                  if (localDesc && backlogDesc) {
+                    changesList.push(`Description updated`);
+                  } else if (localDesc && !backlogDesc) {
+                    changesList.push(`Description added`);
+                  }
+                }
+              }
+
+              // If no changes, skip update
+              if (Object.keys(changes).length === 0) {
+                results.push(`⏭️  ${issueKey}: No changes detected`);
+                continue;
+              }
+
+              // Update the issue
+              await client.updateIssue(issueKey, changes);
+              results.push(`✅ ${issueKey}: ${changesList.join(', ')}`);
+              successCount++;
+
+            } catch (error) {
+              results.push(`❌ ${issueKey}: Update failed - ${error}`);
+              errorCount++;
             }
           }
 
-          // If no changes, return early
-          if (Object.keys(changes).length === 0) {
-            return {
-              content: [{
-                type: 'text',
-                text: `✅ No changes detected for ${issueKey}. Local task file matches Backlog issue.`
-              }]
-            };
-          }
-
-          // Update the issue
-          const updatedIssue = await client.updateIssue(issueKey, changes);
+          const summary = `📊 Summary: ${successCount} updated, ${errorCount} errors, ${issueKeys.length - successCount - errorCount} skipped`;
           
           return {
             content: [{
               type: 'text',
-              text: `✅ Successfully updated ${issueKey} in Backlog!\n\nChanges made:\n${changesList.map(change => `• ${change}`).join('\n')}\n\nView issue: ${client.getIssueUrl(issueKey)}`
+              text: `${summary}\n\n${results.join('\n')}`
             }]
           };
         } catch (error) {
           return {
             content: [{
               type: 'text',
-              text: `❌ Failed to update issue ${issueKey}: ${error}`
+              text: `❌ Failed to update issues: ${error}`
             }],
             isError: true
           };

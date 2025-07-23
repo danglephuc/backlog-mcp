@@ -11,6 +11,10 @@ function parseArgs() {
     if (arg.startsWith('--baseUrl=')) result.baseUrl = arg.slice('--baseUrl='.length);
     if (arg.startsWith('--projectKey=')) result.projectKey = arg.slice('--projectKey='.length);
     if (arg.startsWith('--tasksDir=')) result.tasksDir = arg.slice('--tasksDir='.length);
+    if (arg.startsWith('--ignoreIssueTypes=')) {
+      const types = arg.slice('--ignoreIssueTypes='.length);
+      result.ignoreIssueTypes = types.split(',').map(t => t.trim()).filter(t => t.length > 0);
+    }
   }
   return result;
 }

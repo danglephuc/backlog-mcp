@@ -4,6 +4,7 @@ import { BacklogConfig } from '../types/backlog.js';
 
 export interface Config extends BacklogConfig {
   tasksDir: string;
+  ignoreIssueTypes?: string[];
 }
 
 /**
@@ -17,6 +18,7 @@ export async function loadConfig(overrides?: Partial<Config>): Promise<Config> {
       baseUrl: overrides.baseUrl,
       projectKey: overrides.projectKey,
       tasksDir: overrides.tasksDir || '.tasks',
+      ignoreIssueTypes: overrides.ignoreIssueTypes || []
     };
   }
   // Try to load from config.json first
@@ -25,13 +27,13 @@ export async function loadConfig(overrides?: Partial<Config>): Promise<Config> {
   if (await fs.pathExists(configPath)) {
     try {
       const configData = await fs.readJson(configPath);
-      console.log('Loaded configuration from config.json');
       
       return {
         apiKey: configData.apiKey,
         baseUrl: configData.baseUrl,
         projectKey: configData.projectKey,
-        tasksDir: configData.tasksDir || '.tasks'
+        tasksDir: configData.tasksDir || '.tasks',
+        ignoreIssueTypes: configData.ignoreIssueTypes || []
       };
     } catch (error) {
       console.warn('Failed to load config.json, falling back to environment variables');
@@ -43,6 +45,7 @@ export async function loadConfig(overrides?: Partial<Config>): Promise<Config> {
   const baseUrl = process.env.BACKLOG_BASE_URL;
   const projectKey = process.env.BACKLOG_PROJECT_KEY;
   const tasksDir = process.env.TASKS_DIR || '.tasks';
+  const ignoreIssueTypes = process.env.IGNORE_ISSUE_TYPES ? process.env.IGNORE_ISSUE_TYPES.split(',').map(t => t.trim()) : [];
 
   if (!apiKey || !baseUrl || !projectKey) {
     throw new Error(
@@ -51,14 +54,13 @@ export async function loadConfig(overrides?: Partial<Config>): Promise<Config> {
       '2. Environment variables: BACKLOG_API_KEY, BACKLOG_BASE_URL, BACKLOG_PROJECT_KEY'
     );
   }
-
-  console.log('Loaded configuration from environment variables');
   
   return {
     apiKey,
     baseUrl,
     projectKey,
-    tasksDir
+    tasksDir,
+    ignoreIssueTypes
   };
 }
 
