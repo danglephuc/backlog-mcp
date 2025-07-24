@@ -26,7 +26,14 @@ export class TaskFileManager {
   private tasksDir: string;
 
   constructor(tasksDir: string = '.tasks') {
-    this.tasksDir = path.resolve(tasksDir);
+    // For relative paths, resolve relative to current working directory (project root)
+    // For absolute paths, use as-is
+    if (path.isAbsolute(tasksDir)) {
+      this.tasksDir = tasksDir;
+    } else {
+      // Use process.cwd() to ensure it's relative to the client's working directory
+      this.tasksDir = path.resolve(process.cwd(), tasksDir);
+    }
   }
 
   /**
