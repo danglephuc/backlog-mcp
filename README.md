@@ -28,7 +28,7 @@ npm run build
 
 ## Configuration
 
-This server uses **command-line arguments** for configuration. No config files needed!
+This server uses **environment variables** for configuration.
 
 ### Get Your Backlog API Key
 
@@ -36,6 +36,35 @@ This server uses **command-line arguments** for configuration. No config files n
 2. Go to Personal Settings > API
 3. Generate a new API key
 4. Copy the key for use in the configuration below
+
+### Configuration Options
+
+**Option 1: Environment Variables (Recommended)**
+
+Set the following environment variables:
+
+**Required:**
+- `BACKLOG_API_KEY` - Your Backlog API key
+- `BACKLOG_BASE_URL` - Your Backlog space URL (e.g., `https://yourspace.backlog.com`)
+- `BACKLOG_PROJECT_KEY` - Your project key (e.g., `PROJ`)
+
+**Optional:**
+- `BACKLOG_TASKS_DIR` - Local tasks directory (defaults to `.tasks`)
+- `BACKLOG_IGNORE_ISSUE_TYPES` - Comma-separated list of issue types to ignore (e.g., `Bug,Task`)
+
+**Option 2: Configuration File**
+
+Create a `config.json` file in your project root:
+
+```json
+{
+  "apiKey": "your-backlog-api-key",
+  "baseUrl": "https://yourspace.backlog.com",
+  "projectKey": "YOUR_PROJECT_KEY",
+  "tasksDir": ".tasks",
+  "ignoreIssueTypes": ["Bug", "Task"]
+}
+```
 
 ## Usage with Cursor/Claude Desktop
 
@@ -46,13 +75,16 @@ Add to your MCP settings file:
 {
   "mcpServers": {
     "backlog-mcp": {
-      "command": "backlog-mcp",
+      "command": "npx",
       "args": [
-        "--apiKey=YOUR_API_KEY",
-        "--baseUrl=https://yourspace.backlog.com",
-        "--projectKey=YOUR_PROJECT_KEY",
-        "--tasksDir=.tasks"
-      ]
+        "-y", 
+        "github.com:danglephuc/backlog-mcp"
+      ],
+      "env": {
+        "BACKLOG_API_KEY": "your-api-key",
+        "BACKLOG_BASE_URL": "https://yourspace.backlog.com",
+        "BACKLOG_PROJECT_KEY": "YOUR_PROJECT_KEY"
+      }
     }
   }
 }
@@ -64,20 +96,19 @@ Add to your MCP settings file:
   "mcpServers": {
     "backlog-mcp": {
       "command": "node",
-      "args": [
-        "/path/to/backlog-mcp/dist/index.js",
-        "--apiKey=YOUR_API_KEY",
-        "--baseUrl=https://yourspace.backlog.com",
-        "--projectKey=YOUR_PROJECT_KEY",
-        "--tasksDir=.tasks"
-      ]
+      "args": ["/path/to/backlog-mcp/dist/index.js"],
+      "env": {
+        "BACKLOG_API_KEY": "your-api-key",
+        "BACKLOG_BASE_URL": "https://yourspace.backlog.com",
+        "BACKLOG_PROJECT_KEY": "YOUR_PROJECT_KEY"
+      }
     }
   }
 }
 ```
 
 **Replace:**
-- `YOUR_API_KEY` with your Backlog API key
+- `your-api-key` with your Backlog API key
 - `yourspace` with your Backlog space name
 - `YOUR_PROJECT_KEY` with your project key (e.g., "PROJ")
 
@@ -102,10 +133,20 @@ Pushes local changes back to Backlog.
 **Example:** "Update task PROJ-123 to Backlog"
 
 ### get-issue
-Gets details of a specific issue.
+Gets details of a specific issue from local files.
 
 **Parameters:**
 - `issueKey` (required): Issue key (e.g., "PROJ-123")
+- `parentIssue` (optional): If true, include all child issues when this is a parent issue/feature
+
+**Features:**
+- Reads from local `.tasks` folder 
+- When `parentIssue=true`, returns the main issue plus all child issues in the same folder
+- Useful for understanding the full scope of a feature with all its sub-tasks
+
+**Examples:**
+- Get single issue: "Get task PROJ-123"
+- Get parent with all children: "Get feature PROJ-100 with all child issues"
 
 ### test-connection
 Tests your Backlog API connection.
@@ -166,14 +207,7 @@ You can use any markdown formatting you want.
 4. **Push changes**: `update-issue` with `issueKey: PROJ-123`
 5. **Next sync**: Updates `PROJ-123.md` in `sprint-3/backend/`, new issues go to `others/`
 
-## Command Line Arguments
 
-| Argument       | Required | Description                                    | Example                              |
-|---------------|----------|------------------------------------------------|--------------------------------------|
-| `--apiKey`    | Yes      | Your Backlog API key                          | `--apiKey=abc123...`                |
-| `--baseUrl`   | Yes      | Your Backlog space URL                        | `--baseUrl=https://space.backlog.com` |
-| `--projectKey`| Yes      | Project key in Backlog                        | `--projectKey=PROJ`                  |
-| `--tasksDir`  | No       | Local tasks directory (default: `.tasks`)     | `--tasksDir=my-tasks`               |
 
 ## Development
 
@@ -185,7 +219,7 @@ You can use any markdown formatting you want.
 ### Project Structure
 ```
 src/
-├── index.ts              # Entry point with argument parsing
+├── index.ts              # Entry point
 ├── server.ts             # MCP server and tools
 ├── services/
 │   ├── BacklogClient.ts  # Backlog API client with pagination
@@ -206,7 +240,7 @@ src/
 ### MCP Protocol Issues  
 - **JSON Parse Errors**: Ensure you're using the latest build
 - **Tool Not Found**: Check server configuration in your MCP client
-- **No Response**: Verify command-line arguments are correct
+- **No Response**: Verify environment variables are set correctly
 
 ### File Issues
 - **Missing Files**: Run `sync-issues` to download latest

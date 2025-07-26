@@ -10,17 +10,7 @@ export interface Config extends BacklogConfig {
 /**
  * Load configuration from config.json file or environment variables
  */
-export async function loadConfig(overrides?: Partial<Config>): Promise<Config> {
-  // If overrides are provided and all required fields are present, use them
-  if (overrides && overrides.apiKey && overrides.baseUrl && overrides.projectKey) {
-    return {
-      apiKey: overrides.apiKey,
-      baseUrl: overrides.baseUrl,
-      projectKey: overrides.projectKey,
-      tasksDir: overrides.tasksDir || '.tasks',
-      ignoreIssueTypes: overrides.ignoreIssueTypes || []
-    };
-  }
+export async function loadConfig(): Promise<Config> {
   // Try to load from config.json first
   const configPath = path.resolve('config.json');
   
@@ -44,14 +34,17 @@ export async function loadConfig(overrides?: Partial<Config>): Promise<Config> {
   const apiKey = process.env.BACKLOG_API_KEY;
   const baseUrl = process.env.BACKLOG_BASE_URL;
   const projectKey = process.env.BACKLOG_PROJECT_KEY;
-  const tasksDir = process.env.TASKS_DIR || '.tasks';
-  const ignoreIssueTypes = process.env.IGNORE_ISSUE_TYPES ? process.env.IGNORE_ISSUE_TYPES.split(',').map(t => t.trim()) : [];
+  const tasksDir = process.env.BACKLOG_TASKS_DIR || process.env.TASKS_DIR || '.tasks';
+  const ignoreIssueTypes = process.env.BACKLOG_IGNORE_ISSUE_TYPES 
+    ? process.env.BACKLOG_IGNORE_ISSUE_TYPES.split(',').map(t => t.trim()) 
+    : [];
 
   if (!apiKey || !baseUrl || !projectKey) {
     throw new Error(
       'Missing required configuration. Please provide either:\n' +
       '1. A config.json file with apiKey, baseUrl, and projectKey\n' +
-      '2. Environment variables: BACKLOG_API_KEY, BACKLOG_BASE_URL, BACKLOG_PROJECT_KEY'
+      '2. Environment variables: BACKLOG_API_KEY, BACKLOG_BASE_URL, BACKLOG_PROJECT_KEY\n' +
+      'Optional environment variables: BACKLOG_TASKS_DIR, BACKLOG_IGNORE_ISSUE_TYPES'
     );
   }
   
