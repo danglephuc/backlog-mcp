@@ -596,4 +596,110 @@ export class TaskFileManager {
       return null;
     }
   }
+
+  /**
+   * Find all parent task folders (folders with pattern PARENT-{number})
+   */
+  async findParentTaskFolders(): Promise<string[]> {
+    try {
+      const parentFolders: string[] = [];
+      const entries = await fs.readdir(this.tasksDir, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          // Check if folder name matches parent task pattern (e.g., SBK-2)
+          const parentPattern = /^[A-Z]+-\d+$/;
+          if (parentPattern.test(entry.name)) {
+            parentFolders.push(entry.name);
+          }
+        }
+      }
+      
+      return parentFolders;
+    } catch (error) {
+      console.error('Failed to find parent task folders:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Find temporary task files in a parent folder (files with pattern PARENT-{number}-{random})
+   */
+  async findTemporaryTaskFiles(parentFolder: string): Promise<{ fileName: string; filePath: string; content: { title: string; description: string } }[]> {
+    try {
+      const parentFolderPath = path.join(this.tasksDir, parentFolder);
+      const entries = await fs.readdir(parentFolderPath, { withFileTypes: true });
+      const tempFiles: { fileName: string; filePath: string; content: { title: string; description: string } }[] = [];
+      
+      for (const entry of entries) {
+        if (entry.isFile() && entry.name.endsWith('.md')) {
+          const fileName = entry.name.replace('.md', '');
+          // Check if file name matches temporary pattern (e.g., SBK-2-1, SBK-2-2)
+          const tempPattern = new RegExp(`^${parentFolder}-\\d+$`);
+          if (tempPattern.test(fileName)) {
+            const filePath = path.join(parentFolderPath, entry.name);
+            const content = await fs.readFile(filePath, 'utf8');
+            
+            // Extract title and description
+            const lines = content.split('\n');
+            const titleLine = lines.find(line => line.startsWith('# '));
+            const title = titleLine ? titleLine.replace('# ', '').trim() : '';
+            
+            const titleIndex = lines.findIndex(line => line.startsWith('# '));
+            let description = '';
+            if (titleIndex !== -1) {
+              const descriptionLines = lines.slice(titleIndex + 1);
+              description = descriptionLines.join('\n').trim();
+            }
+            
+            tempFiles.push({
+              fileName,
+              filePath,
+              content: { title, description }
+            });
+          }
+        }
+      }
+      
+      return tempFiles;
+    } catch (error) {
+      console.error(`Failed to find temporary task files in ${parentFolder}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Rename a task file from temporary name to real issue key
+   */
+  async renameTaskFile(oldFilePath: string, newIssueKey: string): Promise<void> {
+    try {
+      const newFilePath = path.join(path.dirname(oldFilePath), `${newIssueKey}.md`);
+      await fs.rename(oldFilePath, newFilePath);
+    } catch (error) {
+      throw new Error(`Failed to rename task file from ${oldFilePath} to ${newIssueKey}: ${error}`);
+    }
+  }
+
+  /**
+   * Create a task file with the correct issue key and content
+   */
+  async createTaskFile(issueKey: string, parentFolder: string, title: string, description: string, baseUrl: string): Promise<void> {
+    try {
+      const parentFolderPath = path.join(this.tasksDir, parentFolder);
+      const filePath = path.join(parentFolderPath, `${issueKey}.md`);
+      
+      // Ensure parent folder exists
+      await ensureDir(parentFolderPath);
+      
+      // Generate markdown content
+      let content = `# ${title}\n\n`;
+      if (description && description.trim() !== '') {
+        content += description;
+      }
+      
+      await fs.writeFile(filePath, content, 'utf8');
+    } catch (error) {
+      throw new Error(`Failed to create task file for ${issueKey}: ${error}`);
+    }
+  }
 } 

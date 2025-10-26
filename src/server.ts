@@ -394,6 +394,145 @@ export class BacklogMcpServer {
         }
       }
     );
+
+    // Bulk create tasks tool
+    this.server.registerTool(
+      'bulk-create-tasks',
+      {
+        title: 'Bulk Create Tasks',
+        description: 'Create Backlog issues from local temporary task files in parent folders',
+        inputSchema: {}
+      },
+      async () => {
+        try {
+          if (!this.config) {
+            return {
+              content: [{
+                type: 'text',
+                text: 'Server configuration not found. Please ensure apiKey, baseUrl, and projectKey are provided.'
+              }],
+              isError: true
+            };
+          }
+
+          // Initialize Backlog client
+          const config: BacklogConfig = { 
+            apiKey: this.config.apiKey, 
+            baseUrl: this.config.baseUrl, 
+            projectKey: this.config.projectKey 
+          };
+          this.backlogClient = new BacklogClient(config);
+
+          // Test connection
+          const isConnected = await this.backlogClient.testConnection();
+          if (!isConnected) {
+            return {
+              content: [{
+                type: 'text',
+                text: 'Failed to connect to Backlog. Please check your API key and base URL.'
+              }],
+              isError: true
+            };
+          }
+
+          // Initialize task manager
+          await this.taskManager.initialize();
+
+          // Find all parent task folders
+          const parentFolders = await this.taskManager.findParentTaskFolders();
+          if (parentFolders.length === 0) {
+            return {
+              content: [{
+                type: 'text',
+                text: 'No parent task folders found. Parent folders should follow the pattern PARENT-{number} (e.g., SBK-2).'
+              }]
+            };
+          }
+
+          const results: string[] = [];
+          let totalCreated = 0;
+          let totalErrors = 0;
+
+          // Process each parent folder
+          for (const parentFolder of parentFolders) {
+            results.push(`\n📁 Processing parent folder: ${parentFolder}`);
+            
+            // Find temporary task files in this parent folder
+            const tempFiles = await this.taskManager.findTemporaryTaskFiles(parentFolder);
+            
+            if (tempFiles.length === 0) {
+              results.push(`  ⏭️  No temporary task files found in ${parentFolder}`);
+              continue;
+            }
+
+            results.push(`  📄 Found ${tempFiles.length} temporary task files`);
+
+            // Get parent issue ID if parent folder exists in Backlog
+            let parentIssueId: number | undefined;
+            try {
+              const parentIssue = await this.backlogClient!.getIssue(parentFolder);
+              parentIssueId = parentIssue.id;
+              results.push(`  🔗 Found parent issue: ${parentIssue.summary} (ID: ${parentIssueId})`);
+            } catch (error) {
+              results.push(`  ⚠️  Parent issue ${parentFolder} not found in Backlog, creating as standalone issues`);
+            }
+
+            // Create issues for each temporary file
+            for (const tempFile of tempFiles) {
+              try {
+                const { fileName, filePath, content } = tempFile;
+                
+                // Create issue in Backlog
+                const issueData = {
+                  summary: content.title || `Task from ${fileName}`,
+                  description: content.description || '',
+                  parentIssueId: parentIssueId
+                };
+
+                const createdIssue = await this.backlogClient!.createIssue(issueData);
+                
+                // Rename local file to use real issue key
+                await this.taskManager.renameTaskFile(filePath, createdIssue.issueKey);
+                
+                // Create proper task file with correct content
+                await this.taskManager.createTaskFile(
+                  createdIssue.issueKey,
+                  parentFolder,
+                  content.title || createdIssue.summary,
+                  content.description || createdIssue.description || '',
+                  this.config.baseUrl
+                );
+
+                results.push(`  ✅ Created ${createdIssue.issueKey}: ${createdIssue.summary}`);
+                totalCreated++;
+                
+              } catch (error) {
+                results.push(`  ❌ Failed to create issue for ${tempFile.fileName}: ${error}`);
+                totalErrors++;
+              }
+            }
+          }
+
+          const summary = `\n📊 Summary: ${totalCreated} issues created, ${totalErrors} errors`;
+          
+          return {
+            content: [{
+              type: 'text',
+              text: `🚀 Bulk Create Tasks Complete${summary}\n\n${results.join('\n')}`
+            }]
+          };
+
+        } catch (error) {
+          return {
+            content: [{
+              type: 'text',
+              text: `❌ Failed to bulk create tasks: ${error}`
+            }],
+            isError: true
+          };
+        }
+      }
+    );
   }
 
   private setupResources(): void {

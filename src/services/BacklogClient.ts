@@ -119,6 +119,45 @@ export class BacklogClient {
   }
 
   /**
+   * Create a new issue
+   */
+  async createIssue(issueData: { 
+    summary: string; 
+    description?: string; 
+    issueTypeId?: number; 
+    priorityId?: number; 
+    parentIssueId?: number;
+  }): Promise<BacklogIssue> {
+    try {
+      const createData: any = {
+        projectId: (await this.getProject()).id,
+        summary: issueData.summary,
+        description: issueData.description || ''
+      };
+      
+      if (issueData.issueTypeId) {
+        createData.issueTypeId = issueData.issueTypeId;
+      }
+      
+      if (issueData.priorityId) {
+        createData.priorityId = issueData.priorityId;
+      }
+      
+      if (issueData.parentIssueId) {
+        createData.parentIssueId = issueData.parentIssueId;
+      }
+
+      const response: AxiosResponse<BacklogIssue> = await this.axiosInstance.post(
+        '/issues',
+        createData
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to create issue: ${error}`);
+    }
+  }
+
+  /**
    * Update an existing issue
    */
   async updateIssue(issueKey: string, updates: { summary?: string; description?: string }): Promise<BacklogIssue> {

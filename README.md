@@ -78,7 +78,7 @@ Add to your MCP settings file:
       "command": "npx",
       "args": [
         "-y", 
-        "github.com:danglephuc/backlog-mcp"
+        "github:danglephuc/backlog-mcp"
       ],
       "env": {
         "BACKLOG_API_KEY": "your-api-key",
@@ -157,6 +157,39 @@ Tests your Backlog API connection.
 Lists all synced task files.
 
 **Parameters:** None
+
+### bulk-create-tasks
+Creates Backlog issues from local temporary task files in parent folders. This tool scans for parent task folders (e.g., `SBK-2`) and creates issues from temporary files with pattern `PARENT-{number}-{random}` (e.g., `SBK-2-1`, `SBK-2-2`).
+
+**Parameters:** None
+
+**Features:**
+- Scans for parent task folders following pattern `PARENT-{number}`
+- Finds temporary task files with pattern `PARENT-{number}-{random}`
+- **Skips files that already have real Backlog issue keys** (e.g., `PROJ-123.md`)
+- Creates issues in Backlog with proper parent-child relationships
+- Renames local files to use real Backlog issue keys
+- Preserves folder organization
+
+**Example Workflow:**
+1. Create parent folder: `SBK-2/`
+2. Create temporary files: `SBK-2-1.md`, `SBK-2-2.md`, etc.
+3. Run `bulk-create-tasks` tool
+4. Files are renamed to real issue keys: `PROJ-123.md`, `PROJ-124.md`
+5. Issues are created in Backlog with proper parent relationships
+
+**Example Folder Structure:**
+```
+.tasks/
+├── SBK-2/                    ← Parent task folder
+│   ├── SBK-2-1.md           ← Temporary file (will be processed)
+│   ├── SBK-2-2.md           ← Temporary file (will be processed)
+│   ├── PROJ-123.md          ← Real issue key (will be skipped)
+│   └── PROJ-124.md          ← Real issue key (will be skipped)
+└── PROJ-100/                ← Another parent folder
+    ├── PROJ-100-1.md        ← Temporary file (will be processed)
+    └── PROJ-100-2.md        ← Temporary file (will be processed)
+```
 
 ## File Organization
 
