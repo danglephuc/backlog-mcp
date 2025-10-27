@@ -60,6 +60,36 @@ export class BacklogClient {
   }
 
   /**
+   * Get issue types for the project
+   */
+  async getIssueTypes(): Promise<any[]> {
+    try {
+      const project = await this.getProject();
+      const response: AxiosResponse<any[]> = await this.axiosInstance.get(
+        `/projects/${project.id}/issueTypes`
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to get issue types: ${error}`);
+    }
+  }
+
+  /**
+   * Get priorities (global, not project-specific)
+   */
+  async getPriorities(): Promise<any[]> {
+    try {
+      const response: AxiosResponse<any[]> = await this.axiosInstance.get(
+        `/priorities`
+      );
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to get priorities: ${error}`);
+    }
+  }
+
+
+  /**
    * Get list of issues for the project
    */
   async getIssues(params: BacklogIssueListParams = {}): Promise<BacklogIssue[]> {
@@ -135,12 +165,33 @@ export class BacklogClient {
         description: issueData.description || ''
       };
       
+      // Set issueTypeId - use provided value or find default "Task" type
       if (issueData.issueTypeId) {
         createData.issueTypeId = issueData.issueTypeId;
+      } else {
+        const issueTypes = await this.getIssueTypes();
+        const taskType = issueTypes.find(type => type.name === 'Task');
+        if (taskType) {
+          createData.issueTypeId = taskType.id;
+        } else {
+          // If no "Task" type found, use the first available type
+          createData.issueTypeId = issueTypes[0]?.id;
+        }
       }
       
+      // Set priorityId - use provided value or find default priority
       if (issueData.priorityId) {
         createData.priorityId = issueData.priorityId;
+      } else {
+        const priorities = await this.getPriorities();
+        // Look for "Normal" priority first, then use the first available
+        const normalPriority = priorities.find(priority => priority.name === 'Normal');
+        if (normalPriority) {
+          createData.priorityId = normalPriority.id;
+        } else {
+          // If no "Normal" priority found, use the first available
+          createData.priorityId = priorities[0]?.id;
+        }
       }
       
       if (issueData.parentIssueId) {
