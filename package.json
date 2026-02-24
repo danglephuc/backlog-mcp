@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsup",
+    "prepare": "tsup",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "test": "jest"
